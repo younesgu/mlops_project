@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main"]
+  workflow_call: {}
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          flake8 src tests --max-line-length=100 --extend-ignore=E203
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --junitxml=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+
+      - name: Smoke-test the local pipeline (data prep -> train -> evaluate)
+        run: |
+          python src/data_prep.py --output-dir data/processed
+          python src/train.py --data-dir data/processed --model-dir outputs/model
+          python src/evaluate.py --model-dir outputs/model --data-dir data/processed --min-accuracy 0.85

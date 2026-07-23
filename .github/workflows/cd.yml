@@ -1,0 +1,111 @@
+name: CD - Train, Register, Deploy on Azure ML
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write   # required for OIDC login to Azure
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
+  WORKSPACE: ${{ secrets.AZURE_ML_WORKSPACE }}
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  train-register-deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # OIDC login - no client secret stored. Requires a federated credential
+      # configured on the App Registration, scoped to this repo + branch.
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Alternative (classic) login if you prefer a stored secret instead of OIDC:
+      # - name: Azure login (service principal secret)
+      #   uses: azure/login@v2
+      #   with:
+      #     creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Install Azure ML CLI extension
+        run: az extension add -n ml -y
+
+      - name: Submit training pipeline to Azure ML
+        id: submit_job
+        run: |
+          JOB_NAME=$(az ml job create -f pipelines/training_pipeline.yml \
+            -g "$RESOURCE_GROUP" -w "$WORKSPACE" \
+            --query name -o tsv)
+          echo "job_name=$JOB_NAME" >> "$GITHUB_OUTPUT"
+          echo "Submitted job: $JOB_NAME"
+
+      - name: Stream job logs and wait for completion
+        run: |
+          az ml job stream -n "${{ steps.submit_job.outputs.job_name }}" \
+            -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+
+      - name: Check job status (fails the workflow if the pipeline/eval gate failed)
+        run: |
+          STATUS=$(az ml job show -n "${{ steps.submit_job.outputs.job_name }}" \
+            -g "$RESOURCE_GROUP" -w "$WORKSPACE" --query status -o tsv)
+          echo "Final job status: $STATUS"
+          if [ "$STATUS" != "Completed" ]; then
+            echo "Pipeline did not complete successfully (status: $STATUS). Aborting deploy."
+            exit 1
+          fi
+
+      - name: Download trained model + metrics from the pipeline job
+        run: |
+          az ml job download -n "${{ steps.submit_job.outputs.job_name }}" \
+            --download-path ./pipeline_outputs \
+            -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+
+      - name: Set up Python (for registration script)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install registration dependencies
+        run: pip install azure-ai-ml azure-identity
+
+      - name: Register model in Azure ML (gated on evaluate.py's metrics.json)
+        run: |
+          MODEL_DIR=$(find ./pipeline_outputs -type d -name "model_output" | head -n 1)
+          python src/register_model.py \
+            --model-dir "$MODEL_DIR" \
+            --model-name iris-classifier \
+            --subscription-id "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            --resource-group "$RESOURCE_GROUP" \
+            --workspace-name "$WORKSPACE"
+
+      - name: Create or update the managed online endpoint
+        run: |
+          if az ml online-endpoint show -n iris-classifier-endpoint -g "$RESOURCE_GROUP" -w "$WORKSPACE" >/dev/null 2>&1; then
+            echo "Endpoint already exists, skipping creation."
+          else
+            az ml online-endpoint create -f deployment/endpoint.yml -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+          fi
+
+      - name: Deploy the new model revision
+        run: |
+          az ml online-deployment create -f deployment/deployment.yml \
+            --all-traffic -g "$RESOURCE_GROUP" -w "$WORKSPACE"
+
+      - name: Smoke-test the endpoint
+        run: |
+          az ml online-endpoint invoke -n iris-classifier-endpoint \
+            --request-file <(echo '{"data": [[5.1, 3.5, 1.4, 0.2]]}') \
+            -g "$RESOURCE_GROUP" -w "$WORKSPACE"

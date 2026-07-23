@@ -1,0 +1,57 @@
+# Azure ML CLI v2 pipeline job: data prep -> train -> evaluate
+# Submit with:
+#   az ml job create -f pipelines/training_pipeline.yml -g <rg> -w <workspace> --stream
+$schema: https://azuremlschemas.azureedge.net/latest/pipelineJob.schema.json
+type: pipeline
+display_name: iris-training-pipeline
+experiment_name: iris-mlops-demo
+compute: azureml:cpu-cluster
+
+settings:
+  default_datastore: azureml:workspaceblobstore
+
+jobs:
+  data_prep_job:
+    type: command
+    code: ../
+    command: >-
+      python src/data_prep.py --output-dir ${{outputs.processed_data}}
+    environment:
+      conda_file: ../environment/conda.yml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+    outputs:
+      processed_data:
+        type: uri_folder
+
+  train_job:
+    type: command
+    code: ../
+    command: >-
+      python src/train.py
+      --data-dir ${{inputs.processed_data}}
+      --model-dir ${{outputs.model_output}}
+      --n-estimators 100
+      --max-depth 5
+    environment:
+      conda_file: ../environment/conda.yml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+    inputs:
+      processed_data: ${{parent.jobs.data_prep_job.outputs.processed_data}}
+    outputs:
+      model_output:
+        type: uri_folder
+
+  evaluate_job:
+    type: command
+    code: ../
+    command: >-
+      python src/evaluate.py
+      --model-dir ${{inputs.model_input}}
+      --data-dir ${{inputs.processed_data}}
+      --min-accuracy 0.85
+    environment:
+      conda_file: ../environment/conda.yml
+      image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04
+    inputs:
+      model_input: ${{parent.jobs.train_job.outputs.model_output}}
+      processed_data: ${{parent.jobs.data_prep_job.outputs.processed_data}}

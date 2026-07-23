@@ -1,0 +1,5 @@
+{
+  "subscription_id": "<YOUR_SUBSCRIPTION_ID>",
+  "resource_group": "rg-mlops-demo",
+  "workspace_name": "mlw-mlops-demo"
+}

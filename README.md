@@ -196,6 +196,13 @@ folder and a confusing `FileNotFoundError` when the registration script tries to
 `metrics_output` at the top level, and `train_job`/`evaluate_job` bind their own outputs
 to `${{parent.outputs.model_output}}` / `${{parent.outputs.metrics_output}}`.
 
+**Why the download step uses `--all`:** `az ml job download` does **not** fetch named
+outputs by default — without `--all` (or an explicit `--output-name <name>`), it only
+pulls `artifacts/logs`. Omitting it silently gives you an empty `named-outputs/` folder,
+which then surfaces downstream as a confusing `FileNotFoundError` when the registration
+script tries to read `metrics.json`. The fix (already in this repo): `cd.yml`'s download
+step passes `--all`.
+
 **Common errors and fixes here:**
 - `Not found compute with name cpu-cluster` → the compute cluster hasn't been created yet;
   run the `az ml compute create ...` command from Section 4.

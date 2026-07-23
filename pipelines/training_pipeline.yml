@@ -10,6 +10,12 @@ compute: azureml:cpu-cluster
 settings:
   default_datastore: azureml:workspaceblobstore
 
+outputs:
+  model_output:
+    type: uri_folder
+  metrics_output:
+    type: uri_folder
+
 jobs:
   data_prep_job:
     type: command
@@ -38,8 +44,7 @@ jobs:
     inputs:
       processed_data: ${{parent.jobs.data_prep_job.outputs.processed_data}}
     outputs:
-      model_output:
-        type: uri_folder
+      model_output: ${{parent.outputs.model_output}}
 
   evaluate_job:
     type: command
@@ -57,5 +62,4 @@ jobs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       processed_data: ${{parent.jobs.data_prep_job.outputs.processed_data}}
     outputs:
-      metrics_output:
-        type: uri_folder
+      metrics_output: ${{parent.outputs.metrics_output}}

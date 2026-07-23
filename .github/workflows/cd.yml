@@ -85,6 +85,21 @@ jobs:
         run: |
           MODEL_DIR=$(find ./pipeline_outputs -type d -name "model_output" | head -n 1)
           METRICS_DIR=$(find ./pipeline_outputs -type d -name "metrics_output" | head -n 1)
+
+          if [ -z "$MODEL_DIR" ]; then
+            echo "Could not find a model_output folder under ./pipeline_outputs. Listing tree for debugging:"
+            find ./pipeline_outputs -type d
+            exit 1
+          fi
+          if [ -z "$METRICS_DIR" ]; then
+            echo "Could not find a metrics_output folder under ./pipeline_outputs. Listing tree for debugging:"
+            find ./pipeline_outputs -type d
+            exit 1
+          fi
+
+          echo "Using MODEL_DIR=$MODEL_DIR"
+          echo "Using METRICS_DIR=$METRICS_DIR"
+
           python src/register_model.py \
             --model-dir "$MODEL_DIR" \
             --metrics-dir "$METRICS_DIR" \

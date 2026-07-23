@@ -45,4 +45,4 @@ jobs:
         run: |
           python src/data_prep.py --output-dir data/processed
           python src/train.py --data-dir data/processed --model-dir outputs/model
-          python src/evaluate.py --model-dir outputs/model --data-dir data/processed --min-accuracy 0.85
+          python src/evaluate.py --model-dir outputs/model --data-dir data/processed --output-dir outputs/metrics --min-accuracy 0.85

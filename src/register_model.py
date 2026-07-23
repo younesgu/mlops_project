@@ -18,13 +18,14 @@ from azure.identity import DefaultAzureCredential
 
 def register(
     model_dir: str,
+    metrics_dir: str,
     model_name: str,
     subscription_id: str,
     resource_group: str,
     workspace_name: str,
     min_accuracy: float = 0.85,
 ) -> None:
-    metrics_path = os.path.join(model_dir, "metrics.json")
+    metrics_path = os.path.join(metrics_dir, "metrics.json")
     with open(metrics_path) as f:
         metrics = json.load(f)
 
@@ -51,6 +52,7 @@ def register(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-dir", type=str, required=True)
+    parser.add_argument("--metrics-dir", type=str, required=True)
     parser.add_argument("--model-name", type=str, required=True)
     parser.add_argument("--subscription-id", type=str, required=True)
     parser.add_argument("--resource-group", type=str, required=True)
@@ -60,6 +62,7 @@ def main() -> None:
 
     register(
         args.model_dir,
+        args.metrics_dir,
         args.model_name,
         args.subscription_id,
         args.resource_group,

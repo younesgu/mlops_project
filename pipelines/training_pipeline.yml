@@ -48,6 +48,7 @@ jobs:
       python src/evaluate.py
       --model-dir ${{inputs.model_input}}
       --data-dir ${{inputs.processed_data}}
+      --output-dir ${{outputs.metrics_output}}
       --min-accuracy 0.85
     environment:
       conda_file: ../environment/conda.yml
@@ -55,3 +56,6 @@ jobs:
     inputs:
       model_input: ${{parent.jobs.train_job.outputs.model_output}}
       processed_data: ${{parent.jobs.data_prep_job.outputs.processed_data}}
+    outputs:
+      metrics_output:
+        type: uri_folder

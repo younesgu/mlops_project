@@ -84,8 +84,10 @@ jobs:
       - name: Register model in Azure ML (gated on evaluate.py's metrics.json)
         run: |
           MODEL_DIR=$(find ./pipeline_outputs -type d -name "model_output" | head -n 1)
+          METRICS_DIR=$(find ./pipeline_outputs -type d -name "metrics_output" | head -n 1)
           python src/register_model.py \
             --model-dir "$MODEL_DIR" \
+            --metrics-dir "$METRICS_DIR" \
             --model-name iris-classifier \
             --subscription-id "${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
             --resource-group "$RESOURCE_GROUP" \
